@@ -1,0 +1,313 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VGP Message Schemas",
+  "version": "0.1",
+  "definitions": {
+    "BaseMessage": {
+      "type": "object",
+      "required": ["vgp_version", "message_type", "request_id", "timestamp", "sender", "signature"],
+      "properties": {
+        "vgp_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+$",
+          "description": "VGP protocol version"
+        },
+        "message_type": {
+          "type": "string",
+          "enum": ["QUERY", "ADVERT", "SELECT", "LOCKED", "PROOF", "SETTLE", "ERROR"]
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique request identifier"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 timestamp"
+        },
+        "sender": {
+          "type": "string",
+          "description": "Domain identifier of sender"
+        },
+        "signature": {
+          "type": "string",
+          "description": "Ed25519 signature of message"
+        }
+      }
+    },
+    "Amount": {
+      "type": "object",
+      "required": ["value", "currency"],
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency code (USD, EUR, BTC, etc.)"
+        }
+      }
+    },
+    "QoS": {
+      "type": "object",
+      "properties": {
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum acceptable latency in milliseconds"
+        },
+        "reliability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum success rate (0.0 - 1.0)"
+        },
+        "bandwidth_mbps": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Required bandwidth in Mbps"
+        }
+      }
+    },
+    "HTLCParams": {
+      "type": "object",
+      "required": ["hash", "timeout", "amount"],
+      "properties": {
+        "hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "SHA-256 hash of secret preimage"
+        },
+        "timeout": {
+          "type": "string",
+          "format": "date-time",
+          "description": "HTLC expiration time"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Locked amount"
+        }
+      }
+    },
+    "Query": {
+      "allOf": [
+        {"$ref": "#/definitions/BaseMessage"},
+        {
+          "type": "object",
+          "required": ["destination", "attributes"],
+          "properties": {
+            "message_type": {"const": "QUERY"},
+            "destination": {
+              "type": "string",
+              "description": "Target domain identifier"
+            },
+            "attributes": {
+              "type": "object",
+              "required": ["amount"],
+              "properties": {
+                "amount": {"$ref": "#/definitions/Amount"},
+                "deadline": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "compliance": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "description": "Required compliance frameworks"
+                },
+                "qos": {"$ref": "#/definitions/QoS"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Advert": {
+      "allOf": [
+        {"$ref": "#/definitions/BaseMessage"},
+        {
+          "type": "object",
+          "required": ["paths", "ttl"],
+          "properties": {
+            "message_type": {"const": "ADVERT"},
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path_id", "hops", "cost", "risk_score", "attributes"],
+                "properties": {
+                  "path_id": {
+                    "type": "string",
+                    "description": "Unique path identifier"
+                  },
+                  "hops": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of gateway domain identifiers"
+                  },
+                  "cost": {
+                    "type": "object",
+                    "required": ["base", "variable", "currency"],
+                    "properties": {
+                      "base": {"type": "number", "minimum": 0},
+                      "variable": {"type": "number", "minimum": 0},
+                      "currency": {"type": "string"}
+                    }
+                  },
+                  "risk_score": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Estimated failure probability"
+                  },
+                  "attributes": {
+                    "type": "object",
+                    "properties": {
+                      "escrow_type": {
+                        "type": "string",
+                        "enum": ["htlc", "escrow", "direct", "smart-contract"]
+                      },
+                      "settlement_time_max": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Maximum settlement time in seconds"
+                      },
+                      "compliance": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "ttl": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Time-to-live in seconds"
+            }
+          }
+        }
+      ]
+    },
+    "Select": {
+      "allOf": [
+        {"$ref": "#/definitions/BaseMessage"},
+        {
+          "type": "object",
+          "required": ["path_id", "htlc_params"],
+          "properties": {
+            "message_type": {"const": "SELECT"},
+            "path_id": {
+              "type": "string",
+              "description": "Selected path identifier"
+            },
+            "htlc_params": {"$ref": "#/definitions/HTLCParams"}
+          }
+        }
+      ]
+    },
+    "Locked": {
+      "allOf": [
+        {"$ref": "#/definitions/BaseMessage"},
+        {
+          "type": "object",
+          "required": ["path_id", "htlc_id", "status"],
+          "properties": {
+            "message_type": {"const": "LOCKED"},
+            "path_id": {"type": "string"},
+            "htlc_id": {"type": "string"},
+            "status": {
+              "type": "string",
+              "enum": ["LOCKED"]
+            }
+          }
+        }
+      ]
+    },
+    "Proof": {
+      "allOf": [
+        {"$ref": "#/definitions/BaseMessage"},
+        {
+          "type": "object",
+          "required": ["htlc_secret", "proof_data"],
+          "properties": {
+            "message_type": {"const": "PROOF"},
+            "htlc_secret": {
+              "type": "string",
+              "description": "Preimage of HTLC hash"
+            },
+            "proof_data": {
+              "type": "object",
+              "required": ["tdr_hash", "signature"],
+              "properties": {
+                "tdr_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "signature": {"type": "string"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Settle": {
+      "allOf": [
+        {"$ref": "#/definitions/BaseMessage"},
+        {
+          "type": "object",
+          "required": ["htlc_id", "status", "final_amount"],
+          "properties": {
+            "message_type": {"const": "SETTLE"},
+            "htlc_id": {"type": "string"},
+            "status": {
+              "type": "string",
+              "enum": ["SETTLED", "REFUNDED"]
+            },
+            "final_amount": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "Error": {
+      "allOf": [
+        {"$ref": "#/definitions/BaseMessage"},
+        {
+          "type": "object",
+          "required": ["error_code", "description"],
+          "properties": {
+            "message_type": {"const": "ERROR"},
+            "error_code": {
+              "type": "string",
+              "enum": [
+                "HTLC_TIMEOUT",
+                "INVALID_SIGNATURE",
+                "INSUFFICIENT_FUNDS",
+                "POLICY_VIOLATION",
+                "PATH_UNAVAILABLE",
+                "UNKNOWN_ERROR"
+              ]
+            },
+            "description": {"type": "string"}
+          }
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/definitions/Query"},
+    {"$ref": "#/definitions/Advert"},
+    {"$ref": "#/definitions/Select"},
+    {"$ref": "#/definitions/Locked"},
+    {"$ref": "#/definitions/Proof"},
+    {"$ref": "#/definitions/Settle"},
+    {"$ref": "#/definitions/Error"}
+  ]
+}
