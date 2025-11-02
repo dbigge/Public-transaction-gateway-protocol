@@ -12,12 +12,16 @@ Welcome to the **Value Gateway Protocol (VGP)** documentation.
 
 ## What is VGP?
 
-VGP is a **trust-boundary routing protocol** that enables atomic value transfers across administrative or economic domains using:
+VGP is a **path-vector value-routing protocol** that operates at trust boundaries, enabling atomic value transfers across administrative or economic domains.
 
+VGP defines the **control and policy layer** for value routing. Settlement mechanics (HTLC, state channels, etc.) and local enforcement architectures (E-NAT, border wallets) are implementation choices and not part of this specification.
+
+**Core Features:**
 - **Path-vector routing** (like BGP, but for value)
-- **HTLCs** (Hashed Time-Locked Contracts) for atomic settlement
+- **Extensible settlement mechanisms** (HTLCs, state channels, ZK-attested transfers, custodial escrow)
 - **Gateway policy enforcement** at trust boundaries
 - **mTLS peering** with signed messages
+- **Atomic settlement** guarantees with safe refund semantics
 
 ## Core Message Types
 

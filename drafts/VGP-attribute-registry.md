@@ -99,9 +99,13 @@ The **VGP Attribute Registry** defines standardized metadata fields that can be 
 
 **Standard Values:**
 - `htlc` — Hashed Time-Locked Contract (default)
-- `escrow` — Third-party custodian holds funds
+- `state_channel` — Off-chain bilateral payment channel locks
+- `trusted_escrow` — Third-party custodian holds funds
+- `zk_attested` — Zero-knowledge proof-based settlement
+- `smart_contract` — On-chain programmable escrow
 - `direct` — No intermediary (high-trust only)
-- `smart-contract` — On-chain programmable escrow
+
+**Description:** Specifies the atomic settlement mechanism used by the gateway. Each mechanism must guarantee all-or-nothing settlement with safe refund semantics. Gateways should declare supported escrow types in their capabilities.
 
 ---
 

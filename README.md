@@ -6,7 +6,7 @@
 
 VGP defines a **trust-boundary protocol** for quoting, selecting, locking, and settling *value paths* across administrative or agentic domains.
 
-It operates **above x402**, using **Hashed Time-Locked Contracts (HTLCs)** to ensure atomic settlement while isolating financial logic from router control planes.
+It operates **above x402**, using extensible settlement mechanisms to ensure atomic value transfer while isolating financial logic from router control planes.
 
 ## Core Principles
 
@@ -15,6 +15,16 @@ It operates **above x402**, using **Hashed Time-Locked Contracts (HTLCs)** to en
 - **Secure mTLS peering** with signed adverts and encrypted TDR logs
 - **Policy enforcement** at gateway boundaries for compliance and risk management
 - **Extensible attribute registry** for QoS, risk, compliance, and escrow types
+
+## Implementation Notes
+
+VGP itself is agnostic to wallet mapping or escrow design.  
+Implementations **MAY**:
+- Use E-NAT-style border wallets for policy isolation
+- Use HTLC or other escrow mechanisms for settlement (state channels, ZK-attested transfers, trusted custodial escrow)
+- Choose any combination that satisfies atomic settlement and refund safety requirements
+
+Both settlement mechanisms and enforcement architecture are deploy-time choices, not part of the VGP specification.
 
 ## Documentation
 

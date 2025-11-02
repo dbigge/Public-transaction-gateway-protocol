@@ -30,7 +30,7 @@ VGP operates at **trust boundaries** — the edges where:
 - Risk profiles change (low-trust ↔ high-compliance zones)
 - Agentic systems coordinate across ownership boundaries
 
-Unlike BGP (which routes packets) or OSPF (which routes within domains), VGP routes **value paths** — sequences of locked commitments that enable atomic multi-hop transfers without requiring trust between intermediate parties.
+Unlike BGP (which routes packets) or OSPF (which routes within domains), VGP routes **value paths** — sequences of commitments that enable atomic multi-hop transfers without requiring trust between intermediate parties.
 
 ### 0.2 Relationship to x402
 
@@ -43,15 +43,15 @@ Unlike BGP (which routes packets) or OSPF (which routes within domains), VGP rou
 **VGP** provides the economic routing layer:
 - Path advertisement (`ADVERT` messages)
 - Quote request/response (`QUERY` / `QUOTED`)
-- Path selection and locking (`SELECT` / `LOCKED`)
+- Path selection and commitment (`SELECT` / `LOCKED`)
 - Settlement coordination (`PROOF` / `SETTLE`)
 
-x402's proposed **`htlc-path`** header extension carries VGP state across hops.
+x402's proposed **`value-path`** header extension carries VGP state across hops.
 
 ### 0.3 Design Principles
 
 1. **Trust isolation:** Each gateway enforces local policy; no global trust required
-2. **Atomic settlement:** HTLCs ensure all-or-nothing value transfer
+2. **Atomic settlement:** Settlement mechanisms ensure all-or-nothing value transfer
 3. **Path vector routing:** Advertise capabilities without exposing internal topology
 4. **Policy enforcement:** Gateways validate compliance, rate limits, and risk thresholds
 5. **Extensibility:** Attribute registry allows domain-specific metadata
@@ -80,7 +80,7 @@ x402's proposed **`htlc-path`** header extension carries VGP state across hops.
 ### 1.2 Gateway Functions
 
 VGP gateways perform the following functions:
-- **HTLC management:** Create, lock, and settle cross-domain value transfers
+- **Settlement management:** Create, lock, and settle cross-domain value transfers using the declared escrow mechanism
 - **Policy enforcement:** Validate compliance requirements, rate limits, and risk thresholds
 - **Message routing:** Forward queries and adverts between peered domains
 - **Settlement coordination:** Manage lock/unlock/refund lifecycle atomically
@@ -330,12 +330,12 @@ New attributes can be proposed via GitHub issue.
 
 ## 6. x402 Integration
 
-### 6.1 `htlc-path` Header
+### 6.1 `value-path` Header
 
-VGP state is carried in x402's `htlc-path` header:
+VGP state is carried in x402's `value-path` header:
 
 ```
-htlc-path: request_id=req-123; path_id=path-1; htlc_id=htlc-456; status=LOCKED
+value-path: request_id=req-123; path_id=path-1; settlement_id=settle-456; status=LOCKED
 ```
 
 This enables:
@@ -347,7 +347,7 @@ This enables:
 
 Each hop logs:
 - `QUERY` / `ADVERT` negotiation
-- `SELECT` / `LOCKED` HTLC creation
+- `SELECT` / `LOCKED` settlement creation
 - Service delivery (x402 request/response)
 - `PROOF` / `SETTLE` finalization
 
@@ -378,34 +378,61 @@ See [`/examples/three-domain-flow.md`](../examples/three-domain-flow.md) for det
 
 ---
 
-## Appendix A: Implementation Guidance (Informative)
+## Appendix A: Extensible Settlement Mechanisms (Informative)
 
-### A.1 Economic NAT (E-NAT)
+VGP abstracts the settlement layer behind the `escrow_type` attribute. The protocol itself does not mandate any specific settlement mechanism; implementations **MAY** use any approach that satisfies atomicity and refund safety requirements.
+
+### A.1 Common Settlement Mechanisms
+
+**Hashed Time-Locked Contracts (HTLCs):**
+- Hash-based cryptographic commitment with timeout protection
+- Enables trustless atomic swaps across multiple hops
+- Requires preimage reveal for settlement, automatic refund on timeout
+- Well-suited for blockchain and payment channel implementations
+
+**State Channel Locks:**
+- Off-chain bilateral commitments with on-chain dispute resolution
+- Lower latency and cost than on-chain HTLCs
+- Requires established channels between counterparties
+
+**Zero-Knowledge Attested Transfers:**
+- Privacy-preserving proofs of payment without revealing amounts or parties
+- Enables selective disclosure for compliance
+- Emerging technology, higher computational requirements
+
+**Trusted Custodial Escrow:**
+- Third-party holds funds during transaction lifecycle
+- Simpler implementation, requires trust in custodian
+- May be preferred in regulated environments with established clearinghouses
+
+### A.2 Implementation Guidance: Economic NAT (E-NAT)
 
 Implementations **MAY** employ Economic Network Address Translation (E-NAT) or equivalent border-wallet mapping to enforce policy isolation and contain risk. Such systems are out of scope for this specification but are commonly deployed at trust boundaries.
 
 **E-NAT Characteristics (Informative):**
-- **Border wallets:** Hold HTLCs for cross-domain transfers, isolating internal liquidity
+- **Border wallets:** Hold settlement commitments for cross-domain transfers, isolating internal liquidity
 - **Policy engines:** Enforce rate limits, compliance rules (KYC/AML), and risk scoring
 - **Domain mapping:** Enable different internal accounting rails, currencies, or ledgers
 - **Compliance choke points:** Provide centralized control for sanctions screening and usage caps
 
 E-NAT is analogous to Network Address Translation (NAT) in IP networks, but operates on economic/value flows rather than packet flows.
 
-### A.2 Reference Implementations
+### A.3 Reference Implementations
 
 Gateway implementers should consider:
-- Multi-signature HTLC wallets for operational security
+- Multi-signature settlement wallets for operational security
 - Rate limiting per sender/path to prevent abuse
 - Automated compliance screening via third-party APIs
 - TDR archival policies for audit retention requirements
+- Declaring supported `escrow_type` values in gateway capabilities
 
 ---
 
 ## Appendix B: Terminology
 
 - **Trust boundary:** Interface between administrative/economic domains
-- **HTLC:** Hashed Time-Locked Contract
+- **Escrow mechanism:** Method for locking and settling value transfers atomically
+- **HTLC:** Hashed Time-Locked Contract (one type of escrow mechanism)
 - **TDR:** Transaction Detail Record (x402 audit log)
 - **Path vector:** Route advertisement including cost/policy metadata
 - **Gateway:** VGP-speaking node at a trust boundary
