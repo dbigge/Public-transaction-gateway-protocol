@@ -2,7 +2,7 @@
 
 **Status:** Draft Specification – v0.1  
 **Maintainer:** [Ledger of Earth](https://github.com/LedgerOfEarth)  
-**Linked PR:** [coinbase/x402#<PR_NUMBER>](https://github.com/coinbase/x402/pulls)  
+**Linked PR:** [coinbase/x402#593](https://github.com/coinbase/x402/pulls)  
 **License:** MIT
 
 ---
