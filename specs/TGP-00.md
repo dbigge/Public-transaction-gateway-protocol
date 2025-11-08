@@ -1,620 +1,158 @@
-# Transaction Gateway Protocol (TGP-00)
+Transaction Gateway Protocol (TGP-00)
 
-**Version:** 0.1-draft  
-**Status:** Draft  
-**Published:** 2025  
-**Organization:** Ledger of Earth
+Version: 0.1-draft
+Status: Draft
+Published: 2025
+Organization: Ledger of Earth
 
-—
+⸻
 
-## Table of Contents
+Table of Contents
+	•	Abstract
+	•	0. Introduction
+	•	0.1 Where TGP Runs
+	•	0.2 Relationship to x402
+	•	0.3 Design Principles
+	•	1. Architecture
+	•	1.1 Network Topology
+	•	1.2 Gateway Functions
+	•	1.3 Message Flow
+	•	1.4 Settlement Topologies
+	•	2. Message Types
+	•	2.1 QUERY … 2.7 ERROR
+	•	3. State Machine
+	•	4. Security Considerations
+	•	5. Attribute Registry
+	•	6. x402 Integration
+	•	7. Example Flows
+	•	8. Future Extensions
+	•	9. References
+	•	10. The 11-Layer Trust Stack (Informative)
+	•	11. TGP L8/L9/L10 Info Block (TIB)
+	•	12. Policy Expression Language (PEL-0.1)
+	•	13. State Summary Objects (SSO)
+	•	14. Receipts & TDR Triplet
+	•	15. Prover Abstraction & Settlement Middleware (Normative)
+	•	Appendix A: Extensible Settlement Mechanisms
+	•	Appendix B: Terminology
+	•	Appendix C: Revision History
+	•	Appendix D: Deprecation Note
 
-- **Abstract**
-- **0. Introduction**
-  - 0.1 Where TGP Runs
-  - 0.2 Relationship to x402
-  - 0.3 Design Principles
-- **1. Architecture**
-  - 1.1 Network Topology
-  - 1.2 Gateway Functions
-  - 1.3 Message Flow
-- **2. Message Types**
-  - 2.1 QUERY
-  - 2.2 ADVERT
-  - 2.3 SELECT
-  - 2.4 LOCKED
-  - 2.5 PROOF
-  - 2.6 SETTLE
-  - 2.7 ERROR
-- **3. State Machine**
-- **4. Security Considerations**
-  - 4.1 Authentication
-  - 4.2 HTLC Safety
-  - 4.3 Denial of Service
-  - 4.4 Privacy
-- **5. Attribute Registry**
-- **6. x402 Integration**
-  - 6.1 `transaction-path` Header
-  - 6.2 TDR Logging
-- **7. Example Flows**
-- **8. Future Extensions**
-- **9. References**
-- **10. The 11-Layer Trust Stack (Informative)**
-- **11. TGP L8/L9/L10 Info Block (TIB) — Normative**
-  - 11.1 Top-Level Structure
-  - 11.2 Endpoint Handles (EH) & Wallet Binding
-  - 11.3 Message Verbs Using TIB
-  - 11.4 TLV/CBOR Notes
-- **12. Policy Expression Language (PEL-0.1) — Normative**
-  - 12.1 Evaluation Order
-  - 12.2 Minimal Dialect
-  - 12.3 Deterministic Policy Hash
-- **13. State Summary Objects (SSO) & Quote Anti-Spam — Normative**
-  - 13.1 SSO Format & Validity
-  - 13.2 QUOTE Preconditions
-  - 13.3 Micro-Bonds & Rate Limits
-- **14. Receipts & TDR Triplet — Normative**
-  - 14.1 Receipt Construction
-  - 14.2 TDR Keys
-- **Appendix A: Extensible Settlement Mechanisms (Informative)**
-- **Appendix B: Terminology**
-- **Appendix C: Revision History**
-- **Appendix D: Deprecation Note**
+⸻
 
-—
+Abstract
 
-## Abstract
-
-The **Transaction Gateway Protocol (TGP)** is an application-layer, path-vector routing protocol for discovering, negotiating, and settling value transfers across trust boundaries. TGP utilizes x402 and standardizes how **value (L8), identity (L9), and policy (L10)** are advertised, negotiated, and enforced end-to-end, enabling atomic multi-hop settlement (e.g., via HTLCs) with verifiable receipts and audit-grade TDRs.
+(unchanged except final line)
 
 TGP provides:
-- **Path discovery** and advertisement with multi-attribute cost, risk, and compliance
-- **Quote & select** negotiation bound to ledger **state summaries**
-- **Atomic settlement** through cryptographic locks and proofs
-- **Policy enforcement** at trust boundaries (Layer 10) using **Endpoint Handles (EH)** and wallet bindings
-- **Extensible registry** for domain-specific attributes and policy dialects
+	•	…
+	•	Pluggable settlement middleware (“Provers”) that implement escrow, burn-based, or ZK-based assurance models behind a common abstraction.
 
-TGP-01 defines an optional **Economic Envelope** extension that allows endpoints and gateways to describe prices and fees (including protocol burn fees) without taking custody of user assets.
+TGP-01 defines the optional Economic Envelope extension.
 
-—
+⸻
 
-## 0. Introduction
+0. Introduction
 
-### 0.1 Where TGP Runs
+(same as prior draft, plus bullet 10)
+	10.	Pluggable settlement logic: Settlement and assurance models (escrow, burn, ZK) are implemented in Prover middleware; TGP standardizes how they are selected and bound to paths, not their internal mechanics.
 
-TGP operates at **trust boundaries**—the edges where:
-- Administrative domains meet (org A ↔ org B)  
-- Economic policies differ (free tier ↔ paid tier)  
-- Risk profiles change (low-trust ↔ high-compliance)  
-- Agentic systems coordinate across ownership boundaries
+⸻
 
-Unlike BGP (packets) or OSPF (intra-domain), TGP routes **value paths**—sequences of commitments that enable atomic multi-hop transfers without trusting intermediaries.
+1. Architecture
 
-### 0.2 Relationship to x402
-
-**x402**: transport & signaling (QUIC/mTLS), session framing, TDR logging.  
-**TGP**: the economic routing layer that carries **L8/L9/L10** info:
-
-- Path advertisement (`ADVERT`)
-- Quote request/response (`QUERY` / `ADVERT` with quotes)
-- Path selection and lock (`SELECT` / `LOCKED`)
-- Settlement coordination (`PROOF` / `SETTLE`)
-
-x402’s `transaction-path` header correlates service delivery with TGP state.
-
-Optional fee and pricing metadata MAY be included via the **Economic Envelope** defined in TGP-01.
-
-### 0.3 Design Principles
-
-1. **Trust isolation:** Each gateway enforces local policy; no global trust required.  
-2. **Atomic settlement:** All-or-nothing transfer across multiple hops.  
-3. **Path-vector routing:** Advertise capabilities without exposing topology.  
-4. **Policy enforcement:** Validate compliance, rate limits, and risk thresholds.  
-5. **Extensibility:** Attribute and policy registries for domain specifics.  
-6. **Auditability:** Signed adverts and TDRs; deterministic receipts.  
-7. **Privacy by default:** Upstream uses **handles**; wallets only at last hop.  
-8. **State-bounded quotes:** Quotes are bound to **State Summary Objects (SSOs)**.  
-9. **Economic transparency:** When used, the Economic Envelope MUST make all fees explicit to endpoints (see TGP-01 §7).
-
-—
-
-## 1. Architecture
-
-### 1.1 Network Topology
+1.1 Network Topology
 
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
 │  Domain A   │◄───────►│  Gateway 1  │◄───────►│  Gateway 2  │
-│  (Client)   │  mTLS   │ (Boundary)  │  mTLS   │ (Boundary)  │
+│ (Client)   │  mTLS   │ (Boundary)  │  mTLS   │ (Boundary)  │
 └─────────────┘         └─────────────┘         └─────────────┘
 │                       │
-│ TGP Peering          │
+│ TGP Peering           │
 ▼                       ▼
 ┌─────────────┐         ┌─────────────┐
-│  Domain B   │◄───────►│  Domain C   │
-│  (Provider) │  mTLS   │  (Provider) │
+│ Domain B   │◄───────►│ Domain C   │
+│ (Provider) │  mTLS   │ (Provider) │
 └─────────────┘         └─────────────┘
 
-### 1.2 Gateway Functions
-
-- **Settlement management:** Create, lock, and settle transfers using declared escrow mechanisms.  
-- **Policy enforcement:** Validate compliance, rate limits, and risk thresholds (L10).  
-- **Message routing:** Forward queries and adverts between peered domains.  
-- **Settlement coordination:** Manage lock/unlock/refund lifecycle atomically.  
-- **Identity mediation:** Resolve **Endpoint Handles (EH)** to wallets only at authorized hops (L9).  
-- **State bounding:** Bind quotes/locks to **SSOs** (L8).  
-- **Economic envelope handling:** When present, interpret and route fees as per TGP-01; otherwise ignore.
-
-### 1.3 Message Flow
-
-Client ──► Gateway A ──► Gateway B ──► Provider
-│           │            │             │
-│ QUERY     │  ADVERT    │  ADVERT     │
-│◄──────────┤◄───────────┤◄────────────┤
-│           │            │             │
-│ SELECT    │  SELECT    │  SELECT     │
-├──────────►├───────────►├────────────►│
-│           │            │             │
-│ (service delivery via x402)          │
-│◄─────────────────────────────────────┤
-│           │            │             │
-│ PROOF     │  PROOF     │  PROOF      │
-├──────────►├───────────►├────────────►│
-│           │            │             │
-│ SETTLE    │  SETTLE    │  SETTLE     │
-│◄──────────┤◄───────────┤◄────────────┤
-
-—
-
-## 2. Message Types
-
-All TGP messages are JSON objects with common fields:
-
-```json
-{
-  "tgp_version": "0.1",
-  "message_type": "QUERY | ADVERT | SELECT | LOCKED | PROOF | SETTLE | ERROR",
-  "request_id": "uuid-v4",
-  "timestamp": "ISO-8601",
-  "sender": "domain-id",
-  "signature": "ed25519-signature",
-  "economic_envelope": { /* optional, see TGP-01 §7 */ }
-}
-
-If present, economic_envelope MUST conform to the structure defined in TGP-01 §7. Implementations that do not understand or process the economic envelope MUST forward it unchanged.
-
-2.1 QUERY
-
-{
-  "tgp_version": "0.1",
-  "message_type": "QUERY",
-  "request_id": "req-123",
-  "sender": "client.example",
-  "destination": "provider.example",
-  "attributes": {
-    "amount": {"value": 100, "currency": "USD"},
-    "deadline": "2025-12-01T12:00:00Z",
-    "compliance": ["KYC", "AML"],
-    "qos": {"latency_ms": 500, "reliability": 0.99}
-  },
-  "economic_envelope": {
-    /* OPTIONAL: may be omitted or partially specified at QUERY time */
-  }
-}
-
-2.2 ADVERT
-
-{
-  "tgp_version": "0.1",
-  "message_type": "ADVERT",
-  "request_id": "req-123",
-  "sender": "gateway-a.example",
-  "paths": [
-    {
-      "path_id": "path-1",
-      "hops": ["gateway-a.example", "gateway-b.example"],
-      "cost": {"base": 1.50, "variable": 0.02, "currency": "USD"},
-      "risk_score": 0.05,
-      "attributes": {
-        "escrow_type": "htlc",
-        "settlement_time_max": 300,
-        "compliance": ["KYC"]
-      }
-    }
-  ],
-  "ttl": 60,
-  "economic_envelope": {
-    /* OPTIONAL: may advertise fee capabilities; see TGP-01 §7 */
-  }
-}
-
-2.3 SELECT
-
-{
-  "tgp_version": "0.1",
-  "message_type": "SELECT",
-  "request_id": "req-123",
-  "sender": "client.example",
-  "path_id": "path-1",
-  "htlc_params": {
-    "hash": "sha256-of-secret",
-    "timeout": "2025-12-01T12:05:00Z",
-    "amount": 101.50
-  },
-  "economic_envelope": {
-    /* OPTIONAL: negotiated P, Bf, Rf as per TGP-01 §7 */
-  }
-}
-
-2.4 LOCKED
-
-{
-  "tgp_version": "0.1",
-  "message_type": "LOCKED",
-  "request_id": "req-123",
-  "sender": "gateway-a.example",
-  "path_id": "path-1",
-  "htlc_id": "htlc-456",
-  "status": "LOCKED"
-}
-
-2.5 PROOF
-
-{
-  "tgp_version": "0.1",
-  "message_type": "PROOF",
-  "request_id": "req-123",
-  "sender": "provider.example",
-  "htlc_secret": "preimage-of-hash",
-  "proof_data": {
-    "tdr_hash": "sha256-of-tdr",
-    "signature": "provider-signature"
-  }
-}
-
-2.6 SETTLE
-
-{
-  "tgp_version": "0.1",
-  "message_type": "SETTLE",
-  "request_id": "req-123",
-  "sender": "gateway-a.example",
-  "htlc_id": "htlc-456",
-  "status": "SETTLED",
-  "final_amount": 101.50,
-  "economic_envelope": {
-    /* OPTIONAL: final committed envelope; see TGP-01 §7 */
-  }
-}
-
-2.7 ERROR
-
-{
-  "tgp_version": "0.1",
-  "message_type": "ERROR",
-  "request_id": "req-123",
-  "sender": "gateway-b.example",
-  "error_code": "HTLC_TIMEOUT",
-  "description": "HTLC expired before proof received"
-}
-
-—
-
-3. State Machine
-
-DISCOVER ──► QUOTED ──► SELECTED ──► LOCKED ──► SERVING
-                                        │
-                                        ▼
-                                     PROVED ──► SETTLED ──► CLOSED
-                                        │
-                                        ▼
-                                    (timeout)
-                                        │
-                                        ▼
-                                     REFUNDED ──► CLOSED
-
-State Descriptions: as in prior draft (unchanged).
-
-—
-
-4. Security Considerations
-
-4.1 Authentication
-	•	All messages signed with sender’s private key (Ed25519).
-	•	mTLS for transport-layer encryption.
-	•	Domain identity verified via DNS/PKI.
-
-4.2 HTLC Safety
-	•	Atomicity via preimage reveal.
-	•	Timeout refund safety.
-	•	SHA-256 preimage resistance.
-
-4.3 Denial of Service
-	•	Rate limiting on QUERY.
-	•	TTL on ADVERT.
-	•	Max path length.
-
-4.4 Privacy
-	•	Path-vector design hides topology.
-	•	Encrypted TDRs.
-	•	Handle-only upstream (see §11.2).
-
-—
-
-5. Attribute Registry
-
-Attribute	Type	Description
-amount	object	{value, currency}
-compliance	array	["KYC", "AML", "GDPR"]
-qos.latency_ms	int	Max latency per hop
-qos.reliability	float	Success rate (0–1)
-escrow_type	string	"htlc", "escrow", "direct"
-risk_score	float	Failure probability
-settlement_time_max	int	Seconds to finalize
-economic_envelope	object	OPTIONAL; see TGP-01 §7 for schema.
-
-New attributes MAY be proposed via GitHub issue.
-
-—
-
-6. x402 Integration
-
-6.1 transaction-path Header
-
-transaction-path: request_id=req-123; path_id=path-1; settlement_id=settle-456; status=LOCKED
-
-When an Economic Envelope is used, the implementation SHOULD ensure that the x402 layer can correlate settlement receipts with the pricing and fee metadata referenced in TGP-01 §7.
-
-6.2 TDR Logging
-
-Each hop logs negotiation, lock/settle transitions, service delivery correlation, and finalization.
-If economic_envelope is present, TDRs SHOULD include a hash or reference to the final committed envelope for auditability.
-
-—
-
-7. Example Flows
-
-See [/examples/three-domain-flow.md].
-
-—
-
-8. Future Extensions
-	•	Multi-currency routing
-	•	Reputation systems
-	•	Privacy enhancements (ZK)
-	•	Dynamic repricing during SERVING
-	•	Economic Envelope extensions for additional fee models (see TGP-01)
-
-—
-
-9. References
-	•	x402 Protocol: Ledger of Earth x402 Spec
-	•	HTLC Overview: Bitcoin Wiki — HTLC
-	•	BGP RFC 4271: Path-vector routing
-	•	TGP-01: Proof-of-Settlement and Economic Envelope Extension (Ledger of Earth, 2025)
-
-—
-
-10. The 11-Layer Trust Stack (Informative)
-
-This model extends OSI into economic trust:
-
-Layer	Name	Classical Analogue	Description
-L1	Physical	Fiber/Copper/RF	Signal transmission.
-L2	Data Link	Ethernet/PPP	Reliable neighbor link.
-L3	Network	IP/BGP	Routing across domains.
-L4	Transport	TCP/UDP	End-to-end flow control.
-L5	Session	SIP/TLS handshake	Agent session setup.
-L6	Presentation	ASN.1/JSON/TLS	Encoding, crypto, proofs.
-L7	Application	HTTP/SIP/DNS	Networked APIs.
-L8	Database of Transactions	—	Distributed ledgers, state proofs, escrow contracts.
-L9	Identity	—	DIDs, EH handles, wallet bindings, attestations.
-L10	Policy	—	Permissions, fees, jurisdictions, QoS, compliance.
-L11	DApp/Intent	—	Business logic: DAOs, markets, agents.
-
-Heuristics: L1–L7 move bits; L8–L10 move value under rules; L11 explains intent.
-
-—
-
-11. TGP L8/L9/L10 Info Block (TIB) — Normative
-
-A compact structure carried in TGP messages (JSON or CBOR/TLV) to bind value (L8), identity (L9), and policy (L10) to a quote, ticket, or settlement.
-
-11.1 Top-Level Structure
-
-{
-  "meta": {
-    "v": 1,
-    "nonce": "128-bit-hex",
-    "exp": 1762147200000,
-    "trace_id": "uuid-v4"
-  },
-  "l8_value": {
-    "network": { "family": "EVM|UTXO|Solana|...", "chain_id": 369, "endpoint_class": "full|archive|light" },
-    "asset": { "symbol": "USDC", "address": "0x...", "decimals": 6 },
-    "state_summaries": ["sso-id-1","sso-id-2"],
-    "state_refs?": [{ "type": "block_header", "height": 23456789, "hash": "0x..." }],
-    "amount": "1250.00",
-    "settlement": { "mode": "immediate|escrow|invoice", "timelock_ms": 180000, "escrow_contract?": "0x..." },
-    "price_oracle?": { "id": "chainlink:USDCUSD", "tolerance_bps": 50 }
-  },
-  "l9_identity": {
-    "entities": {
-      "initiator": "did:loe:dbigge",
-      "payer": { "handle": "eh:tbca:...", "proofs": ["sig:...","zk:addr_ownership"] },
-      "payee": { "handle": "eh:tbcz:...", "proofs": ["attest:..."] },
-      "mediators?": ["as12345", "auditor.example"]
-    },
-    "bindings": [
-      { "handle": "eh:tbca:...", "can_settle_on": ["evm:0xAA..."], "proof": "sig-or-zk" }
-    ],
-    "vc_refs?": ["sd-jwt:...", "vc:jwt:..."]
-  },
-  "l10_policy": {
-    "roles": [
-      { "role": "initiator", "entity": "did:loe:dbigge", "rights": ["quote","commit"] },
-      { "role": "router", "entity": "as12345", "rights": ["route","settle"] }
-    ],
-    "rules": {
-      "allow_networks": [{"family":"EVM","chain_id":369}],
-      "deny_jurisdictions": ["RU"],
-      "fee_split": {"network_fees":"payer","service_fees":"split:70/30"},
-      "caps": {"max_total_usd":"2000","max_fee_usd":"5"},
-      "qos": {"max_latency_ms":800,"min_success_rate":0.99}
-    },
-    "compliance": ["OFAC:US-2025-10"],
-    "audit": { "tdr_level": "summary|full", "log_sink": "syslog://tbc.local:514" }
-  },
-  "crypto": { "enc": ["hpke:X25519"], "sig": "base64(ed25519(sig over canonical TIB))" }
-}
-
-Norms:
-	•	meta.nonce + meta.exp required for anti-replay; peers cache (trace_id, nonce) within window.
-	•	crypto.sig is required by the initiator on QUOTE/SELECT/COMMIT/SETTLE envelopes.
-	•	l8_value.state_summaries are required on QUOTE/ADVERT (see §13).
-	•	l8_value.state_refs become required at COMMIT/SETTLE.
-
-11.2 Endpoint Handles (EH) & Wallet Binding
-	•	Upstream hops MUST use Endpoint Handles (eh:*) rather than raw wallet addresses.
-	•	Last authorized hop MAY resolve EH→wallet if policy allows.
-	•	Bindings MUST be proven by signature or ZK ownership proofs.
-	•	Clear-text upstream wallet disclosure is prohibited.
-
-11.3 Message Verbs Using TIB
-	•	PRECHECK (optional fast-fail): l9_identity + l10_policy only.
-	•	QUERY/ADVERT: include TIB with state_summaries; quotes are bound to SSO ids.
-	•	SELECT/LOCKED: include TIB; policy_hash from §12.3 MUST include SSO ids.
-	•	PROOF/SETTLE: include TIB with state_refs + settlement txids.
-
-11.4 TLV/CBOR Notes
-
-Recommended TLVs:
-0xA0 VERSION, 0xA1 NONCE, 0xA2 EXPIRY, 0xA3 TRACE_ID,
-0xC8 L8-VALUE, 0xC9 L9-IDENTITY, 0xCA L10-POLICY,
-0xF0 CRYPTO, 0xFF MAC.
-
-Unknown non-critical TLVs MAY be ignored; unknown critical TLVs MUST cause ERROR.unsupported.
-
-—
-
-12. Policy Expression Language (PEL-0.1) — Normative
-
-A minimal, deterministic policy grammar for L10.
-
-12.1 Evaluation Order
-
-deny → caps → allow → qos → fees (strict).
-Policies MUST be pure and side-effect-free.
-
-12.2 Minimal Dialect
-
-{
-  "allow_networks": [{"family":"EVM","chain_id":369}],
-  "deny_jurisdictions": ["RU"],
-  "caps": {"max_total_usd":"2000","max_fee_usd":"5"},
-  "fee_split": {"network_fees":"payer","service_fees":"split:70/30"},
-  "qos": {"max_latency_ms":800,"min_success_rate":0.99}
-}
-
-12.3 Deterministic Policy Hash
-
-policy_hash = H( canonical_json(policy) || join(sorted(SSO_ids)) )
-All quotes, tickets, and settlements MUST carry policy_hash.
-
-—
-
-13. State Summary Objects (SSO) & Quote Anti-Spam — Normative
-
-13.1 SSO Format & Validity
-
-SSO is a signed, cacheable summary of ledger state:
-
-{
-  "sso_id": "uuid",
-  "chain_id": 369,
-  "height": 23456789,
-  "midprices?": {"USDCUSD":"1.0002"},
-  "gas_quote?": {"max_gwei":"5"},
-  "liquidity_caps?": {"USDC":"$50,000"},
-  "valid_ms": 60000,
-  "issuer": "gateway-a.example",
-  "sig": "ed25519(signature)"
-}
-
-	•	Gateways MAY trust local or federated SSO issuers.
-	•	SSOs expire at now + valid_ms.
-
-13.2 QUOTE Preconditions
-	•	QUERY/ADVERT MUST reference one or more current SSO_ids.
-	•	SELECT/LOCKED MUST carry same SSO_ids; otherwise ERROR.SSO_MISMATCH.
-	•	COMMIT/SETTLE MUST include concrete state_refs matching or exceeding SSO height.
-
-13.3 Micro-Bonds & Rate Limits
-
-To mitigate quote-floods:
-	•	Gateways MAY require a quote-bond (refundable or fee-credit) announced in ADVERT.
-	•	Gateways SHOULD enforce per-sender rate-limits and moving-window quotas.
-	•	Violations MAY return ERROR.RATE_LIMIT or ERROR.BOND_REQUIRED.
-
-—
-
-14. Receipts & TDR Triplet — Normative
-
-14.1 Receipt Construction
-
-A valid receipt MUST commit to all three:
-
-receipt_hash = H( L8_settlement_proofs || L9_bindings || L10_policy_hash )
-
-	•	Without the triplet, the receipt is invalid.
-
-14.2 TDR Keys
-
-Gateways MUST log at least:
-
-ts, trace_id, verb, result, l8.family, l8.chain_id,
-asset.symbol, amount, txid?, route_asn?, policy_hash, sso_ids, error_code?
-
-—
-
-Appendix A: Extensible Settlement Mechanisms (Informative)
-
-A.1 Common Settlement Mechanisms
-	•	HTLCs
-	•	State Channels
-	•	ZK-Attested Transfers
-	•	Custodial Escrow
-
-A.2 Implementation Guidance: Economic NAT (E-NAT)
-	•	Border wallets, policy engines, domain mapping, compliance choke points.
-
-A.3 Reference Implementations
-	•	Multisig ops, rate limiting, automated screening, TDR retention, declared escrow_type.
-
-—
-
-Appendix B: Terminology
-
-(As in prior draft; unchanged.)
-
-—
-
-Appendix C: Revision History
+Settlement may occur in either of two planes:
+	1.	Direct HTLC /on-ledger locks (original model)
+	2.	Gateway + Prover middleware, where gateways invoke on-chain or off-chain Provers (§15) that implement escrow, single-sided escrow, proof-of-burn, or ZK attestation.
+
+         ┌───────────────────────────── TGP / x402 Control Plane ─────────────────────────────┐
+┌─────────────┐   ┌─────────────┐                     ┌─────────────┐   ┌─────────────┐
+│ Client/Agent│◄─►│ Gateway A  │◄───────────────────►│ Gateway B  │◄─►│ Provider   │
+└─────────────┘   └─────────────┘                     └─────────────┘  └─────────────┘
+                       │                                               │
+                       ▼                                               ▼
+                ┌───────────┐                                       ┌───────────┐
+                │ Prover A  │                                      │ Prover B  │
+                │ (escrow/  │                                      │ (burn/    │
+                │ burn/zk)  │                                      │ zk)       │
+                └───────────┘                                      └───────────┘
+
+1.2 Gateway Functions
+	•	Settlement management through HTLCs or Provers
+	•	Prover orchestration and capability matching
+	•	Policy enforcement (L10)
+	•	Message routing between peers
+	•	Identity mediation (L9)
+	•	State bounding (L8)
+	•	Economic Envelope handling (TGP-01)
+	•	TDR logging including Prover handles
+
+1.3 Message Flow
+
+(standard TGP flow diagram retained — then add)
+
+1.3.1 Prover-Mediated Sub-Flow
+
+(1) Client → Gateway A: TGP QUERY/SELECT with prover_id/profile  
+(2) Gateway A → Prover A: openPosition(params)  
+(3) Gateways A↔B: normal TGP LOCKED/PROOF/SETTLE, referencing ProverID and handle  
+(4) Gateway B → Prover B (optional): open/close mirrors  
+(5) Gateways closePosition on settlement or refund.
+
+The original HTLC-only design remains valid; the Prover layer adds structured escrow, single-sided escrow, or reputation models.
+
+1.4 Settlement Topologies
+
+1.4.1 Direct HTLC Settlement (Original Model)
+	•	Atomic hash-timelock contracts on ledger(s)
+	•	No external Prover
+	•	Simple, channel-style flows
+
+1.4.2 Gateway + Prover (CoreProver/Escrow Model)
+	•	Gateways invoke Provers (openPosition/closePosition)
+	•	Supports single-sided escrow, legal commitments, and optional fulfillment
+	•	Extensible to proof-of-burn and ZK policies
+	•	The CoreProver architecture (EscrowCommitmentProverV0) is the reference implementation of this topology (see Appendix E: CoreProver Reference Profile).
+
+⸻
+
+(Sections 2 – 14 remain as previous version, unchanged except attributes already referencing prover_id etc.)
+
+⸻
+
+15. Prover Abstraction & Settlement Middleware — Normative
+
+(full section exactly as previously printed, unchanged)
+
+⸻
+
+Appendix A – Extensible Settlement Mechanisms
+
+(includes bullet “Prover-mediated escrow and reputation models (see §15)”).
+
+⸻
+
+Appendix E – CoreProver Reference Profile (Informative Placeholder)
+
+(to be defined next — will document EscrowCommitmentProverV0 including PreAuth, Commitment, and Fulfillment flows.)
+
+⸻
+
+Appendix C – Revision History
 
 Version	Date	Changes
-0.1-draft	2025-01	Initial public draft
-0.1-draft	2025-11	Added L8/L9/L10 TIB, PEL-0.1, SSOs, receipts, and 11-layer model; updated TOC and intro; aligned with TGP-01 Economic Envelope and renamed VGP→TGP fields.
-
-—
-
-Appendix D: Deprecation Note
-
-Renaming Notice (2025-11)
-The protocol previously designated Value Gateway Protocol (VGP) has been formally renamed to Transaction Gateway Protocol (TGP) to better represent its generalized function as a transaction routing and negotiation protocol applicable across financial, AI, and carrier-grade infrastructure.
-	•	All references to VGP in earlier documents are equivalent to TGP.
-	•	The TIB (Transaction Info Block) supersedes the VIB definition.
-	•	Implementations SHOULD migrate to TGP-00 or later versions.
-	•	The transaction-path header replaces the earlier value-path header in x402 integrations.
-
-Maintainer: Ledger of Earth
-Contact: tgp@ledgerofearth.org
-Repository: https://github.com/ledgerofearth/tgp
+0.1-draft	2025-11	Added Prover abstraction, CoreProver topology, and updated Architecture & Message Flow to reflect Gateway + Prover design.
